@@ -9,9 +9,14 @@ pluggable adapters; the core knows nothing about Docker, SSH, or your hosts.
 
 Public API (stable within a minor version):
     hashing     — canonical, reproducible plan hashing (the trust anchor)
-    schema      — the generic plan schema + loader
-    policy      — deployment policy (action registry, forbidden rules, secret patterns)
+    schema      — the generic plan schema + loader; SchemaExtension (extra plan fields)
+    policy      — deployment policy (action registry, forbidden rules, secret patterns);
+                  optional schema_extension + custom_invariants extension seams
     validate    — deterministic validator (schema + invariants + hash recompute)
     preconditions — typed precondition engine (fail-closed) + probe adapter protocol
+
+A deployment carries domain-specific plan fields and extra validation rules WITHOUT forking
+the core: attach a ``schema.SchemaExtension`` and/or ``policy.CustomInvariant``s to the
+``Policy``. The core stays domain-agnostic; the deployment declares its extras.
 """
-__version__ = "0.1.0"
+__version__ = "0.2.0"
