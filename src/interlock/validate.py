@@ -18,6 +18,14 @@ comes from the :class:`~interlock.policy.Policy`, never from this module.
   I5  every mutating stage has non-empty preconditions (if policy requires)
   I6  no forbidden action or forbidden target (stage or rollback)
   I7  no plaintext secret in params / preconditions / target
+
+Two optional extension seams, both carried on the Policy so propose and execute validate
+under identical rules (see :mod:`interlock.policy`):
+  * ``policy.schema_extension`` — extra plan fields merged into the schema for I1
+    (``additionalProperties: False`` stays in force; an undeclared field still fails I1).
+  * ``policy.custom_invariants`` — deployment-specific rules run in the same pass, numbered
+    I8, I9, … after the built-ins, each wrapped fail-closed (a raising check becomes a failure,
+    never an exception out of ``validate()``).
 """
 from __future__ import annotations
 
@@ -93,8 +101,12 @@ def validate(plan: dict, policy: Policy) -> ValidationResult:
     structured verdict (it raises only on a genuinely broken *schema*, which is a bug)."""
     res = ValidationResult(schema_valid=True)
 
-    # I1 — structural schema.
-    validator = jsonschema.Draft202012Validator(plan_schema())
+    # I1 — structural schema (base schema, or the base with the deployment's declared
+    # extra fields merged in — additionalProperties:False still bites undeclared fields).
+    schema = plan_schema()
+    if policy.schema_extension is not None:
+        schema = policy.schema_extension.apply(schema)
+    validator = jsonschema.Draft202012Validator(schema)
     errs = sorted(validator.iter_errors(plan), key=lambda e: list(e.path))
     if errs:
         res.schema_valid = False
@@ -173,6 +185,19 @@ def validate(plan: dict, policy: Policy) -> ValidationResult:
         _scan_secret(s.get("target"), policy, hits)
     res.invariants.append(InvariantResult(7, "no-plaintext-secrets", not hits,
                                           f"secret-shaped values: {hits}" if hits else ""))
+
+    # I8+ — deployment-supplied custom invariants, run in the same pass and folded into
+    # approvability. Each is wrapped fail-closed: a check that raises becomes a FAILED
+    # invariant, never an exception out of validate() (which must never raise on a bad plan).
+    next_id = 8
+    for ci in policy.custom_invariants:
+        try:
+            r = ci.check(plan, policy)
+            ok, detail = r if isinstance(r, tuple) else (bool(r), "")
+        except Exception as e:  # noqa: BLE001
+            ok, detail = False, f"custom invariant raised: {type(e).__name__}: {e}"
+        res.invariants.append(InvariantResult(next_id, ci.name, bool(ok), "" if ok else str(detail)))
+        next_id += 1
 
     res.approvable = res.schema_valid and all(i.ok for i in res.invariants)
     return res

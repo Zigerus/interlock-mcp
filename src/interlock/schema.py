@@ -20,6 +20,9 @@ bump voids prior approvals exactly as a body change does.
 """
 from __future__ import annotations
 
+import copy
+from dataclasses import dataclass, field
+
 SCHEMA_VERSION = "1"
 
 # Precondition comparison operators the core precondition engine understands.
@@ -139,5 +142,57 @@ PLAN_SCHEMA = {
 
 def plan_schema() -> dict:
     """Return the Draft 2020-12 plan schema (a fresh reference each call is unnecessary;
-    the dict is treated as read-only)."""
+    the dict is treated as read-only — never mutate it in place; see SchemaExtension.apply)."""
     return PLAN_SCHEMA
+
+
+@dataclass(frozen=True)
+class SchemaExtension:
+    """Consumer-declared extra plan fields, merged into the generic schema at validation
+    time — so a deployment can carry domain-specific fields **without forking the schema**.
+
+    Each mapping is ``{field_name: <JSON-Schema fragment>}`` merged into the ``properties``
+    of the named node. ``additionalProperties: False`` stays in force everywhere, so the
+    extension widens the schema by *exactly* the fields you name and no more — an
+    **undeclared** field still rejects. That is the whole point: the seam adds fields, it
+    does not open the schema.
+
+      * ``stage_properties`` — merged into every stage object's properties
+        (e.g. a domain ``priority``, an ``owner`` block, an array-of-objects ``approvals``).
+      * ``body_properties``  — merged into the plan body's properties
+        (e.g. a ``change_window`` object, a ``risk_class`` enum).
+
+    There is deliberately **no** ``target_properties``: the target object is already
+    ``additionalProperties: True``, so extra target fields (host, region, …) are always
+    allowed without declaration.
+
+    Extension fields live inside ``body``, so they participate in ``plan_hash`` exactly like
+    built-in fields — an approval binds them too. Extensions are validation-only; they do
+    not change how the hash is computed.
+    """
+    stage_properties: dict = field(default_factory=dict)
+    body_properties: dict = field(default_factory=dict)
+
+    def apply(self, base_schema: dict) -> dict:
+        """Return a NEW schema (deep-copied) with the declared fields merged in.
+
+        The base is **never** mutated — critical, because ``plan_schema()`` returns a shared
+        module-level dict; an in-place merge would silently extend the schema for every later
+        ``validate()`` call in the process. Raises ``ValueError`` if an extension names a field
+        that already exists in the base (extensions may only ADD fields, never redefine a
+        built-in — that could weaken a guarantee)."""
+        schema = copy.deepcopy(base_schema)
+        body_props = schema["properties"]["body"]["properties"]
+        stage_props = body_props["stages"]["items"]["properties"]
+        self._merge(body_props, self.body_properties, "body")
+        self._merge(stage_props, self.stage_properties, "stage")
+        return schema
+
+    @staticmethod
+    def _merge(target_props: dict, additions: dict, level: str) -> None:
+        for name, fragment in additions.items():
+            if name in target_props:
+                raise ValueError(
+                    f"SchemaExtension: {level} field {name!r} already exists in the base schema — "
+                    "extensions may only ADD fields, not redefine built-ins")
+            target_props[name] = copy.deepcopy(fragment)

@@ -114,18 +114,21 @@ channel, so nothing the model can call flips a plan to approved. Details in
 | Piece | What it is |
 |---|---|
 | **Plan** | An envelope + a hashed `body` of ordered **stages** (`action`, `target`, typed `preconditions`, `verify`, `rollback`). Actions are opaque to the core. |
-| **Policy** | Your deployment's domain knowledge: which actions mutate, which actions/targets are forbidden, what a secret looks like. Not baked into the schema. |
-| **Invariants** | Seven universal checks the validator enforces (schema, hash-recompute, unique ids + known actions, mutating→rollback, mutating→preconditions, no-forbidden, no-secrets). |
+| **Policy** | Your deployment's domain knowledge: which actions mutate, which actions/targets are forbidden, what a secret looks like — plus (optionally) your schema extension and custom invariants. Not baked into the schema. |
+| **Invariants** | Seven universal checks the validator enforces (schema, hash-recompute, unique ids + known actions, mutating→rollback, mutating→preconditions, no-forbidden, no-secrets) — plus any `CustomInvariant`s your Policy adds. |
 | **Adapters** | Two small protocols — `ExecutorAdapter.execute(...)` and `ProbeAdapter.probe(...)` — the only place your infrastructure appears. |
+| **Extensions** | Carry your own plan fields (`SchemaExtension`) and validation rules (`CustomInvariant`) on the Policy — the core stays domain-agnostic; you declare your extras without forking it. See [`docs/SCHEMA.md`](docs/SCHEMA.md#extending-the-schema-without-forking-it). |
 
 See [`docs/SCHEMA.md`](docs/SCHEMA.md), [`docs/PROTOCOL.md`](docs/PROTOCOL.md), and
 [`docs/THREAT-MODEL.md`](docs/THREAT-MODEL.md).
 
 ## Status
 
-**Alpha (0.1).** The deterministic core (hashing, schema, validator, precondition engine)
-and the approval/audit/executor layer are covered by an adversarial test suite. APIs may
-shift before 1.0. Issues and review welcome.
+**Alpha (0.2).** The deterministic core (hashing, schema, validator, precondition engine)
+and the approval/audit/executor layer are covered by an adversarial test suite. 0.2 adds the
+two extension seams (`SchemaExtension`, `CustomInvariant`) so a deployment carries its own
+plan fields and validation rules without forking the core. APIs may shift before 1.0. Issues
+and review welcome.
 
 ## License
 

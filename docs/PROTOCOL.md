@@ -64,6 +64,22 @@ class ProbeAdapter(Protocol):
 required precondition is fail-closed. Reference implementations that adapt plain callables
 live in `interlock.adapters.command`.
 
+## Extension seams (domain fields + custom invariants)
+
+The core schema and its seven invariants are domain-agnostic. A deployment that needs more
+declares it on the **Policy** — never by forking the core — through two seams that ride
+alongside the adapters:
+
+- **`schema.SchemaExtension`** — extra plan fields (`Policy(schema_extension=...)`). Merged
+  into the schema for validation; `additionalProperties: false` stays in force so an
+  *undeclared* field still rejects. Extension fields live in `body` and are hashed.
+- **`policy.CustomInvariant`** — extra validation rules (`Policy(custom_invariants=(...,))`),
+  run in the same pass as the built-in seven, numbered `I8+`, each wrapped fail-closed.
+
+Both seams are carried on the Policy, which `validate()` receives on **both** the propose and
+the execute path — so a plan is validated under identical schema + invariants at both ends
+(no "approvable at propose, rejected at execute" divergence). See [`SCHEMA.md`](SCHEMA.md#extending-the-schema-without-forking-it).
+
 ## Async by design
 
 `propose` returns immediately with a durable `plan_id`; approval happens whenever the

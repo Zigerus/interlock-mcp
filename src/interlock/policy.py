@@ -11,14 +11,25 @@ A :class:`Policy` tells the validator, per *this* deployment:
 Keeping this out of the schema is what makes Interlock reusable: the same core governs a
 Docker homelab and a Kubernetes fleet; only the policy differs. Ship a policy as code or
 load one from a dict (e.g. parsed from YAML/JSON config) via :meth:`Policy.from_dict`.
+
+A Policy is where *all* the domain-specific knowledge the generic core needs lives — not
+only action classification and forbidden/secret rules, but also (optionally) the deployment's
+**schema extension** (extra plan fields, via :class:`~interlock.schema.SchemaExtension`) and
+its **custom invariants** (extra validation rules beyond the built-in seven, via
+:class:`CustomInvariant`). Because ``validate()`` receives the Policy on both the propose and
+the execute path, bundling these here guarantees a plan is validated under the *same* schema
+and invariants at both ends — a plan can never be approvable at propose time yet rejected at
+execute time because the two used different rules.
 """
 from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from typing import Iterable
+from typing import Callable, Iterable
 
-__all__ = ["ActionSpec", "Policy", "DEFAULT_SECRET_PATTERNS", "DIGEST_RE"]
+from .schema import SchemaExtension
+
+__all__ = ["ActionSpec", "CustomInvariant", "Policy", "DEFAULT_SECRET_PATTERNS", "DIGEST_RE"]
 
 # Secret-VALUE patterns. A ".env reference", "$VAR", or key *name* does not match these;
 # an actual embedded credential does. Deployments may extend/replace this list.
@@ -44,6 +55,21 @@ class ActionSpec:
     creating: bool = False
 
 
+@dataclass(frozen=True)
+class CustomInvariant:
+    """A deployment-specific validation rule, run in the SAME pass as the built-in seven.
+
+    ``check(plan, policy)`` inspects the full plan document (``plan["body"]["stages"]`` etc.,
+    with the Policy available for action classification) and returns either ``(ok, detail)`` or
+    a bare ``bool``. It **must not** raise — the validator wraps every custom invariant
+    fail-closed (an exception becomes ``ok=False`` with the exception text as detail), so
+    ``validate()`` keeps its contract of never raising on a bad plan. Custom invariants are
+    numbered I8, I9, … after the built-ins, but tests/consumers should key on ``name`` (an int
+    id shifts if the built-in count ever changes)."""
+    name: str
+    check: Callable[["dict", "Policy"], "tuple[bool, str] | bool"]
+
+
 @dataclass
 class Policy:
     """A deployment's governance policy. All fields optional — an empty Policy treats
@@ -62,6 +88,9 @@ class Policy:
     #   "read"     -> unknown actions are assumed read-only (permissive; dev only)
     unknown_action: str = "reject"
     require_preconditions_for_mutating: bool = True
+    # optional extension seams (see module docstring): extra plan fields + extra invariants.
+    schema_extension: SchemaExtension | None = None
+    custom_invariants: tuple[CustomInvariant, ...] = ()
 
     def __post_init__(self):
         if self.unknown_action not in ("reject", "mutating", "read"):
@@ -105,11 +134,21 @@ class Policy:
 
     # --- construction ---------------------------------------------------------
     @classmethod
-    def from_dict(cls, d: dict) -> "Policy":
-        """Build a Policy from plain config (e.g. parsed YAML/JSON)."""
+    def from_dict(cls, d: dict, *, custom_invariants: tuple[CustomInvariant, ...] = ()) -> "Policy":
+        """Build a Policy from plain config (e.g. parsed YAML/JSON).
+
+        ``schema_extension`` may be supplied in the dict as
+        ``{"stage_properties": {...}, "body_properties": {...}}`` (JSON-Schema fragments).
+        ``custom_invariants`` are Python callables and so cannot come from a config dict —
+        pass them explicitly via the keyword argument when loading a policy from config."""
         reg = {a: ActionSpec(mutating=bool(s.get("mutating", False)),
                              creating=bool(s.get("creating", False)))
                for a, s in (d.get("action_registry") or {}).items()}
+        ext = d.get("schema_extension")
+        schema_extension = SchemaExtension(
+            stage_properties=dict((ext or {}).get("stage_properties") or {}),
+            body_properties=dict((ext or {}).get("body_properties") or {}),
+        ) if ext else None
         return cls(
             action_registry=reg,
             forbidden_actions=frozenset(d.get("forbidden_actions") or ()),
@@ -117,6 +156,8 @@ class Policy:
             secret_patterns=tuple(d.get("secret_patterns") or DEFAULT_SECRET_PATTERNS),
             unknown_action=d.get("unknown_action", "reject"),
             require_preconditions_for_mutating=bool(d.get("require_preconditions_for_mutating", True)),
+            schema_extension=schema_extension,
+            custom_invariants=tuple(custom_invariants),
         )
 
 
