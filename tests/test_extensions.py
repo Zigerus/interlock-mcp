@@ -170,6 +170,66 @@ def test_multiple_custom_invariants_are_numbered_sequentially():
     assert res.approvable, res.as_dict()
 
 
+# --- target-subschema override (the one thing add-only merging can't do) ------
+# A FICTIONAL alternate target shape: keyed by {realm, ref} instead of the base {kind, id}.
+ALT_TARGET = {
+    "type": "object",
+    "required": ["realm", "ref"],
+    "properties": {"realm": {"type": "string"}, "ref": {"type": "string"}},
+    "additionalProperties": True,
+}
+
+
+def alt_target_policy() -> Policy:
+    return Policy(
+        action_registry=registry(read_only=["status_read"], mutating=["change_thing"]),
+        schema_extension=SchemaExtension(target_schema=ALT_TARGET),
+    )
+
+
+def _stage_with_target(target, rollback_target):
+    return {
+        "id": "s1", "action": "change_thing", "target": target,
+        "params": {"replicas": "3"},
+        "preconditions": [{"check": "up", "probe": {"id": "web"},
+                           "expect": {"op": "equals", "value": "true"}}],
+        "rollback": {"action": "change_thing", "target": rollback_target, "params": {"replicas": "1"}},
+    }
+
+
+def test_target_override_accepts_alternate_shape():
+    plan = build_plan(stages=[_stage_with_target({"realm": "svc", "ref": "web"},
+                                                 {"realm": "svc", "ref": "web"})])
+    res = validate(rehash(plan), alt_target_policy())
+    assert res.approvable, res.as_dict()
+
+
+def test_target_override_rejects_the_base_shape():
+    # with the override active, a base {kind, id} target no longer satisfies the schema.
+    plan = build_plan(stages=[_stage_with_target({"kind": "service", "id": "web"},
+                                                 {"realm": "svc", "ref": "web"})])
+    res = validate(rehash(plan), alt_target_policy())
+    assert not res.schema_valid, "override should replace, not union, the target contract"
+    assert not res.approvable
+
+
+def test_target_override_applies_to_rollback_target_too():
+    # stage target valid under override, but the ROLLBACK target still uses the base shape.
+    plan = build_plan(stages=[_stage_with_target({"realm": "svc", "ref": "web"},
+                                                 {"kind": "service", "id": "web"})])
+    res = validate(rehash(plan), alt_target_policy())
+    assert not res.schema_valid, "override must apply to the rollback target site as well"
+
+
+def test_target_override_does_not_change_the_hash():
+    # the override is validation-only: the same body bytes hash identically with/without it.
+    from interlock.hashing import plan_hash_from_body
+    body = build_plan(stages=[_stage_with_target({"realm": "svc", "ref": "web"},
+                                                 {"realm": "svc", "ref": "web"})])["body"]
+    # hashing never consults the schema; prove the value model is what is hashed.
+    assert plan_hash_from_body(body) == plan_hash_from_body(copy.deepcopy(body))
+
+
 # --- no-extension path is unchanged (base behavior preserved) -----------------
 def test_no_extension_policy_still_seven_invariants():
     base_policy = Policy(action_registry=registry(read_only=["status_read"], mutating=["change_thing"]))

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "interlock-mcp"
-version = "0.2.0"
+version = "0.3.0"
 description = "A human-in-the-loop governance interlock for AI agents (MCP server): propose, countersign the exact plan, then execute stage-by-stage — precondition-checked, verified, audited."
 readme = "README.md"
 requires-python = ">=3.11"

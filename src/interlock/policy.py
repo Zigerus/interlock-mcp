@@ -148,6 +148,7 @@ class Policy:
         schema_extension = SchemaExtension(
             stage_properties=dict((ext or {}).get("stage_properties") or {}),
             body_properties=dict((ext or {}).get("body_properties") or {}),
+            target_schema=(ext or {}).get("target_schema"),
         ) if ext else None
         return cls(
             action_registry=reg,

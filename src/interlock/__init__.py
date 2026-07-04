@@ -19,4 +19,4 @@ A deployment carries domain-specific plan fields and extra validation rules WITH
 the core: attach a ``schema.SchemaExtension`` and/or ``policy.CustomInvariant``s to the
 ``Policy``. The core stays domain-agnostic; the deployment declares its extras.
 """
-__version__ = "0.2.0"
+__version__ = "0.3.0"
