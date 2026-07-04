@@ -162,9 +162,20 @@ class SchemaExtension:
       * ``body_properties``  — merged into the plan body's properties
         (e.g. a ``change_window`` object, a ``risk_class`` enum).
 
-    There is deliberately **no** ``target_properties``: the target object is already
-    ``additionalProperties: True``, so extra target fields (host, region, …) are always
-    allowed without declaration.
+    For extra *fields on a stage's or the body's* objects, there is deliberately no
+    ``target_properties``: the target object is already ``additionalProperties: True``, so
+    extra target fields (host, region, …) are always allowed without declaration.
+
+    The one thing add-only field merging cannot do is change a **required** built-in field —
+    e.g. a deployment whose targets are keyed ``{type, id}`` rather than the base's
+    ``{kind, id}``. For that, and only that, ``target_schema`` **replaces** the target
+    subschema wholesale (at every place a target appears — a stage's ``target`` and a
+    compensating rollback's ``target``). This is a deliberate, explicit override of the most
+    permissive node in the schema (target is already ``additionalProperties: True``); it does
+    not touch the hash — the body bytes are unchanged, so ``plan_hash`` is unchanged — and it
+    does not affect forbidden-target policy (that matches on the target *value*, independent of
+    the target *schema*). Use it to fit an existing plan vocabulary without a fork; leave it
+    ``None`` to keep the base ``{kind, id}`` contract.
 
     Extension fields live inside ``body``, so they participate in ``plan_hash`` exactly like
     built-in fields — an approval binds them too. Extensions are validation-only; they do
@@ -172,9 +183,11 @@ class SchemaExtension:
     """
     stage_properties: dict = field(default_factory=dict)
     body_properties: dict = field(default_factory=dict)
+    target_schema: dict | None = None  # full replacement for the target subschema (both uses)
 
     def apply(self, base_schema: dict) -> dict:
-        """Return a NEW schema (deep-copied) with the declared fields merged in.
+        """Return a NEW schema (deep-copied) with the declared fields merged in and, if set,
+        the target subschema replaced.
 
         The base is **never** mutated — critical, because ``plan_schema()`` returns a shared
         module-level dict; an in-place merge would silently extend the schema for every later
@@ -186,6 +199,13 @@ class SchemaExtension:
         stage_props = body_props["stages"]["items"]["properties"]
         self._merge(body_props, self.body_properties, "body")
         self._merge(stage_props, self.stage_properties, "stage")
+        if self.target_schema is not None:
+            # replace the target subschema at BOTH sites it appears: a stage's target and a
+            # compensating-rollback stage's target (the irreversible-marker rollback has none).
+            stage_props["target"] = copy.deepcopy(self.target_schema)
+            for branch in stage_props.get("rollback", {}).get("oneOf", []):
+                if isinstance(branch, dict) and "target" in branch.get("properties", {}):
+                    branch["properties"]["target"] = copy.deepcopy(self.target_schema)
         return schema
 
     @staticmethod
@@ -194,5 +214,6 @@ class SchemaExtension:
             if name in target_props:
                 raise ValueError(
                     f"SchemaExtension: {level} field {name!r} already exists in the base schema — "
-                    "extensions may only ADD fields, not redefine built-ins")
+                    "extensions may only ADD fields, not redefine built-ins "
+                    "(use target_schema to replace the target subschema)")
             target_props[name] = copy.deepcopy(fragment)

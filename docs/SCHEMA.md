@@ -111,8 +111,15 @@ Rules that keep the seam a seam, not a bypass:
 - Extension fields live inside `body`, so they are **hashed** like any other body field — an
   approval binds them, and editing one after approval voids it. The extension is
   validation-only; it does not change how the hash is computed.
-- There is no `target_properties`: the target object is already `additionalProperties: true`,
-  so extra target fields need no declaration.
+- There is no `target_properties` (the target object is already `additionalProperties: true`,
+  so extra target fields need no declaration) — but the one thing add-only merging *can't* do
+  is change a **required** built-in field. If your targets are keyed `{type, id}` (or any shape
+  other than the base `{kind, id}`), set `SchemaExtension(target_schema=...)` to **replace** the
+  target subschema wholesale — applied at both the stage target and the compensating-rollback
+  target. It's a deliberate override of the schema's most permissive node (target is already
+  `additionalProperties: true`); it leaves the body bytes — and therefore `plan_hash` —
+  unchanged, and does not affect forbidden-target policy (which matches the target *value*, not
+  its *schema*). Example: `SchemaExtension(target_schema={"type": "object", "required": ["type", "id"], "properties": {"type": {"type": "string"}, "id": {"type": "string"}}, "additionalProperties": True})`.
 
 ## Custom invariants
 
