@@ -94,3 +94,22 @@ class FakeProbe:
 @pytest.fixture
 def fake_probe():
     return FakeProbe
+
+
+class FakeExecutor:
+    """Records every action dispatched; fails actions named in ``fail``."""
+    def __init__(self, fail: set | None = None):
+        self.calls: list[tuple] = []
+        self.fail = fail or set()
+
+    def execute(self, action, params, target):
+        from interlock.executor import ExecResult
+        self.calls.append((action, params, target))
+        if action in self.fail:
+            return ExecResult(ok=False, detail=f"{action} failed (fake)")
+        return ExecResult(ok=True, detail=f"{action} ok")
+
+
+@pytest.fixture
+def fake_executor():
+    return FakeExecutor
