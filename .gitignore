@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Interlock runtime state (audit logs / plan store when using file backends)
+*.interlock-state/
+*.audit.jsonl
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
