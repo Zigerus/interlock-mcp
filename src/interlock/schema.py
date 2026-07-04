@@ -100,7 +100,10 @@ _STAGE_SCHEMA = {
                    "description": "Opaque to the core; the Policy classifies it and an adapter runs it."},
         "params": {"type": "object", "description": "Action arguments (adapter-interpreted)."},
         "target": _TARGET_SCHEMA,
-        "preconditions": {"type": "array", "items": _PRECONDITION_SCHEMA},
+        "preconditions": {"type": "array", "items": _PRECONDITION_SCHEMA,
+                          "description": "Checked against live state BEFORE dispatch (fail-closed)."},
+        "verify": {"type": "array", "items": _PRECONDITION_SCHEMA,
+                   "description": "Post-conditions checked AFTER dispatch to confirm the intended end-state."},
         "rollback": _ROLLBACK_SCHEMA,
         "note": {"type": "string"},
     },
@@ -117,7 +120,8 @@ PLAN_SCHEMA = {
         "plan_id": {"type": "string", "minLength": 1},
         "plan_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
         "status": {"enum": PLAN_STATES},
-        # envelope: an optional approval record the gate fills in — NOT hashed.
+        # envelope lifecycle fields the store/gate fill in — NOT hashed (outside body).
+        "proposed_at": {"type": "string"},
         "approval": {"type": ["object", "null"]},
         "body": {
             "type": "object",
