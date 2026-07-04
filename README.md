@@ -28,7 +28,7 @@ agent never holds the keys; it holds a *proposal*.
 
 ## The loop
 
-```mermaid
+``` mermaid
    agent                    interlock core                      human            world
      │  propose(body)             │                               │                │
      ├───────────────────────────▶│ validate (schema+invariants)  │                │
