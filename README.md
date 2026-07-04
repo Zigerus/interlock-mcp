@@ -29,23 +29,27 @@ agent never holds the keys; it holds a *proposal*.
 ## The loop
 
 ```mermaid
-   agent                    interlock core                      human            world
-     │  propose(body)             │                               │                │
-     ├───────────────────────────▶│ validate (schema+invariants)  │                │
-     │                            │ hash (RFC-8785 JCS)           │                │
-     │        plan_id  ◀──────────┤ store as PROPOSED (held)      │                │
-     │                            │                               │                │
-     │                            │        review + countersign   │                │
-     │                            │◀──────────────────────────────┤ interlock approve
-     │                            │ bind (schema_version, hash)   │                │
-     │  execute(plan_id)          │                               │                │
-     ├───────────────────────────▶│ re-validate + release gate    │                │
-     │                            │  per stage:                   │                │
-     │                            │   ├ preconditions vs LIVE state│───probe──────▶│
-     │                            │   ├ dispatch (adapter) ────────┼───execute────▶│
-     │                            │   └ verify post-conditions ────│───probe──────▶│
-     │        result  ◀───────────┤ halt-and-audit on any failure │                │
-     │                            │ append to hash-chained audit  │                │
+   sequenceDiagram
+    participant A as agent
+    participant IC as interlock core
+    participant H as human
+    participant W as world
+    A ->> IC: propose(body)
+    Note right of IC: validate (schema + invariants) <br/> hash (RFC-8785 JCS)
+    IC ->> A: plan_id
+    Note right of IC: store as PROPOSED (held)
+    H ->> IC: review + countersign
+    Note right of H: interlock approve
+    Note over H,IC: bind (schema_version, hash)
+    A ->> IC: execute(plan_id)
+    Note right of A: re-validate + release gate <br/> per stage:
+    activate IC
+    IC ->> W: preconditions vs LIVE state ---- probe
+    IC ->> W: dispatch (adapter) ---- execute
+    IC ->> W: verify post-conditions ---- probe
+    deactivate IC
+    IC -x IC: halt-and-audit on any failure
+    Note right of IC: append to hash-chained audit
 ```
 
 ## Guarantees
