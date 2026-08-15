@@ -30,8 +30,8 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-server = ["mcp>=1.2"]          # the FastMCP server surface
-dev = ["pytest>=8", "mcp>=1.2"]
+server = ["mcp>=1.2,<2"]          # FastMCP surface; <2: SDK 2.0 moved mcp.server.fastmcp
+dev = ["pytest>=8", "mcp>=1.2,<2"]
 
 [project.urls]
 Homepage = "https://github.com/Zigerus/interlock-mcp"
