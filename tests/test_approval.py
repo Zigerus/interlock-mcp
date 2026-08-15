@@ -18,10 +18,10 @@ def test_propose_then_approve_binds_hash():
     store = InMemoryStore()
     p = propose(store, build_plan())
     assert p["status"] == "proposed"
-    a = approve(store, p["plan_id"], approver="nathan", reasoning="lgtm")
+    a = approve(store, p["plan_id"], approver="alice", reasoning="lgtm")
     assert a["status"] == "approved"
     assert a["approval"]["binding"]["plan_hash"] == p["plan_hash"]
-    assert a["approval"]["approved_by"] == "nathan"
+    assert a["approval"]["approved_by"] == "alice"
 
 
 def test_approve_requires_proposed_state():

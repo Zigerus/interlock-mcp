@@ -12,7 +12,7 @@ from interlock.executor import execute_plan
 def _approved(plan):
     store = InMemoryStore()
     propose(store, plan)
-    return approve(store, plan["plan_id"], approver="nathan")
+    return approve(store, plan["plan_id"], approver="alice")
 
 
 def _two_stage_plan():

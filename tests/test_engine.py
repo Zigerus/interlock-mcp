@@ -45,7 +45,7 @@ def test_propose_invalid_not_stored(demo_policy):
 def test_full_lifecycle_execute(demo_policy):
     eng = _engine(demo_policy, obs={"running": True})
     pid = eng.propose(_body()).plan_id
-    eng.approve(pid, approver="nathan", reasoning="ok")
+    eng.approve(pid, approver="alice", reasoning="ok")
     res = eng.execute(pid)
     assert res.status == "executed"
     assert eng.get(pid)["status"] == "executed"
